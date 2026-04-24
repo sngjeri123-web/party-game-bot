@@ -529,16 +529,14 @@ async def _handle_registration(update: Update, context: ContextTypes.DEFAULT_TYP
             await msg.reply_text("Пришли фото или напиши `скип`.", parse_mode="Markdown")
             return
 
-        st["photo"] = photo_bytes
-        st["phase"] = "bday"
+        participants[cid] = new_participant(st["names"], photo_bytes)
+        REG.pop(cid, None)
+        _save()
+        status = "с фото ✨" if photo_bytes else "без фото"
         await msg.reply_text(
-            f"Почти готово! Ты один из **именинников**?\n\n"
-            f"_(Именинники не получают заданий — только голосуют и оценивают других)_",
+            f"✅ Зарегали тебя: **{st['names']}** ({status})\n\n"
+            f"Жди когда начнётся игра! 🎉",
             parse_mode="Markdown",
-            reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("🎂 Да, я именинник!", callback_data="reg_bday_yes"),
-                InlineKeyboardButton("🙂 Нет, я играю", callback_data="reg_bday_no"),
-            ]]),
         )
 
 
@@ -1101,26 +1099,7 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if data == "noop":
         return
 
-    # === ФИНАЛ РЕГИСТРАЦИИ: ИМЕНИННИК? ===
-    if data.startswith("reg_bday_"):
-        st = REG.get(cid)
-        if not st or st.get("phase") != "bday":
-            await q.edit_message_text("⏱ Регистрация уже завершена.")
-            return
-        is_bday = data == "reg_bday_yes"
-        p = new_participant(st["names"], st.get("photo"))
-        p["is_birthday"] = is_bday
-        participants[cid] = p
-        REG.pop(cid, None)
-        _save()
-        tag = "🎂 именинник" if is_bday else "🙂 игрок"
-        await q.edit_message_text(
-            f"✅ Зареган(а): **{st['names']}** ({tag})\n\n"
-            f"Жди начала игры! 🎉",
-            parse_mode="Markdown",
-        )
-        return
-
+    # === ФИНАЛ РЕГИСТРАЦИИ АДМИНА: ИМЕНИННИК? ===
     if data.startswith("adm_reg_bday_") and is_admin(uid):
         st = admin_state.get(uid)
         if not st or st.get("phase") != "reg_bday":

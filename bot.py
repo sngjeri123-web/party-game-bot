@@ -199,25 +199,48 @@ async def announce(bot, text, photo=None):
 def admin_kb():
     me_registered = ADMIN_ID and ADMIN_ID in participants
     rows = []
-    if not me_registered:
-        rows.append([InlineKeyboardButton("📝 Зарегаться (моя пара)", callback_data="adm_reg")])
-    else:
-        rows.append([InlineKeyboardButton(f"✅ Вы: {participants[ADMIN_ID]['names']}", callback_data="noop")])
-    rows.extend([
-        [InlineKeyboardButton("⭐ Отметить именинников", callback_data="adm_mark_birthday")],
-        [InlineKeyboardButton("📊 Кто зарегался", callback_data="adm_list")],
-        [InlineKeyboardButton("❌ Удалить участника", callback_data="adm_delete")],
-        [InlineKeyboardButton("━━━ Игра ━━━", callback_data="noop")],
-        [InlineKeyboardButton("🎲 Новое задание", callback_data="adm_new_task")],
-        [InlineKeyboardButton("⚔️ Дуэль", callback_data="adm_duel")],
-        [InlineKeyboardButton("🎯 Задание от админа", callback_data="adm_custom")],
-        [InlineKeyboardButton("🔒 Закрыть голосование", callback_data="adm_close_vote")],
-        [InlineKeyboardButton("🔒 Закрыть оценки", callback_data="adm_close_rating")],
-        [InlineKeyboardButton("━━━ Финал ━━━", callback_data="noop")],
-        [InlineKeyboardButton("📈 Текущие баллы", callback_data="adm_scores")],
-        [InlineKeyboardButton("🏁 Завершить вечеринку", callback_data="adm_finish")],
-        [InlineKeyboardButton("🔄 Сбросить всё", callback_data="adm_reset")],
+
+    # Основные действия
+    rows.append([InlineKeyboardButton("🎲 Новое задание", callback_data="adm_new_task")])
+    rows.append([
+        InlineKeyboardButton("⚔️ Дуэль", callback_data="adm_duel"),
+        InlineKeyboardButton("🎯 Кастомное", callback_data="adm_custom"),
     ])
+
+    # Контекстная кнопка закрытия — только если есть активный этап
+    if state == "task_voting" or state == "duel_voting":
+        rows.append([InlineKeyboardButton("� Закрыть голосование", callback_data="adm_close_vote")])
+    elif state == "task_rating":
+        rows.append([InlineKeyboardButton("🔒 Закрыть оценки", callback_data="adm_close_rating")])
+
+    # Инфо и настройки
+    rows.append([
+        InlineKeyboardButton("📈 Баллы", callback_data="adm_scores"),
+        InlineKeyboardButton("👥 Участники", callback_data="adm_people"),
+    ])
+    rows.append([InlineKeyboardButton("⭐ Именинники", callback_data="adm_mark_birthday")])
+
+    # Регистрация админа — только если ещё не зареган
+    if not me_registered:
+        rows.append([InlineKeyboardButton("📝 Я тоже играю (зарегаться)", callback_data="adm_reg")])
+
+    # Финал
+    rows.append([InlineKeyboardButton("🏁 Завершить вечеринку", callback_data="adm_finish")])
+
+    return InlineKeyboardMarkup(rows)
+
+
+def people_kb():
+    """Подменю: список + удаление."""
+    rows = []
+    for cid, p in participants.items():
+        star = " ⭐" if p.get("is_birthday") else ""
+        rows.append([
+            InlineKeyboardButton(f"{p['names']}{star} ({p['score']})", callback_data="noop"),
+            InlineKeyboardButton("�", callback_data=f"del_{cid}"),
+        ])
+    rows.append([InlineKeyboardButton("🔄 Сбросить всё", callback_data="adm_reset")])
+    rows.append([InlineKeyboardButton("◀️ Назад", callback_data="adm_back")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -1276,28 +1299,15 @@ async def _on_admin_cb(q, context, data):
         )
         return
 
-    if data == "adm_list":
+    if data == "adm_people":
         if not participants:
-            await q.edit_message_text("📊 Пусто.", reply_markup=admin_kb())
+            await q.edit_message_text("� Пока никого нет.", reply_markup=admin_kb())
             return
-        lines = [f"📊 **Зареганы: {len(participants)}**\n"]
-        for i, (cid, p) in enumerate(participants.items(), 1):
-            star = " ⭐" if p.get("is_birthday") else ""
-            lines.append(f"{i}. {p['names']}{star} — баллы: {p['score']}, штраф: {p['penalty_rub']}₽")
         await q.edit_message_text(
-            "\n".join(lines), parse_mode="Markdown", reply_markup=admin_kb()
+            f"👥 **Участники ({len(participants)}):**\nТыкни 🗑 чтобы удалить.",
+            parse_mode="Markdown",
+            reply_markup=people_kb(),
         )
-        return
-
-    if data == "adm_delete":
-        if not participants:
-            await q.edit_message_text("Некого удалять.", reply_markup=admin_kb())
-            return
-        rows = []
-        for cid, p in participants.items():
-            rows.append([InlineKeyboardButton(f"❌ {p['names']}", callback_data=f"del_{cid}")])
-        rows.append([InlineKeyboardButton("◀️ Назад", callback_data="adm_back")])
-        await q.edit_message_text("🗑 Кого удалить?", reply_markup=InlineKeyboardMarkup(rows))
         return
 
     if data == "adm_back":
@@ -1421,7 +1431,14 @@ async def _on_delete_cb(q, context, data):
         name = participants[target]["names"]
         del participants[target]
         _save()
-        await q.edit_message_text(f"✅ {name} удалён(а).", reply_markup=admin_kb())
+        if participants:
+            await q.edit_message_text(
+                f"✅ {name} удалён(а).\n\n👥 **Участники ({len(participants)}):**",
+                parse_mode="Markdown",
+                reply_markup=people_kb(),
+            )
+        else:
+            await q.edit_message_text(f"✅ {name} удалён(а). Больше никого.", reply_markup=admin_kb())
     else:
         await q.edit_message_text("Не найден.", reply_markup=admin_kb())
 

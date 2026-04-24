@@ -765,6 +765,7 @@ async def _close_task_vote(bot):
         except Exception:
             pass
         await announce(bot, f"❌ Народ не поверил! Задание **{names}** не засчитано.\n(Да: {yes}, Нет: {no})")
+        await broadcast_live_table(bot)
         _reset_current_task()
     else:
         # Засчитано — переходим к оценкам
@@ -836,6 +837,7 @@ async def _close_task_rating(bot):
         f"⭐ Средняя: {avg:.1f}\n"
         f"Итого у {names}: **{p['score']}** баллов"
     )
+    await broadcast_live_table(bot)
     _reset_current_task()
 
 
@@ -885,6 +887,7 @@ async def _handle_refusal(bot, executor_cid: int):
         f"Штраф {penalty}₽ в общак, −3 балла.\n"
         f"_Задание было:_ _{mission}_"
     )
+    await broadcast_live_table(bot)
     _reset_current_task()
 
 
@@ -968,6 +971,7 @@ async def _check_duel_ready(bot):
             except Exception:
                 pass
         await announce(bot, f"💩 Оба слились! И {p1_names}, и {p2_names} получили штрафы.")
+        await broadcast_live_table(bot)
         state = "idle"
         _reset_duel()
         return
@@ -991,6 +995,7 @@ async def _check_duel_ready(bot):
             f"💸 {participants[loser_cid]['names']} слил(а)сь — штраф {pen}₽\n"
             f"🏆 Автопобеда **{participants[winner_cid]['names']}** (+10)"
         )
+        await broadcast_live_table(bot)
         state = "idle"
         _reset_duel()
         return
@@ -1073,6 +1078,7 @@ async def _close_duel_vote(bot):
             f"Голоса: {p1_names} {p1_votes} — {p2_names} {p2_votes}, ничья: {ties}"
         )
 
+    await broadcast_live_table(bot)
     state = "idle"
     _reset_duel()
 
@@ -1195,6 +1201,7 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"Итого у тебя: {p['score']} баллов."
         )
         await announce(bot, f"🎰 **{p['names']}** отыгрался(ась) через рулетку! Уважение 🔥")
+        await broadcast_live_table(bot)
         return
 
     if data == "roulette_fail":
@@ -1208,6 +1215,7 @@ async def on_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"😔 Ну бывает. Дополнительный штраф: **{pen}₽**", parse_mode="Markdown"
         )
         await announce(bot, f"💸 **{p['names']}** не справился(ась) с рулеткой — ещё {pen}₽ в общак.")
+        await broadcast_live_table(bot)
         return
 
     # === ГОЛОСОВАНИЕ ЗА ЗАДАНИЕ ===
@@ -1522,6 +1530,29 @@ def _format_scoreboard() -> str:
     total_rub = sum(p["penalty_rub"] for p in participants.values())
     lines.append(f"\n💰 Общак: **{total_rub} ₽**")
     return "\n".join(lines)
+
+
+def _format_live_table() -> str:
+    """Компактная лайв-таблица для общего чата после каждого события."""
+    items = [(cid, p) for cid, p in participants.items() if not p.get("is_birthday")]
+    if not items:
+        return ""
+    items.sort(key=lambda x: -x[1]["score"])
+    lines = ["📊 **Турнирная таблица:**"]
+    for i, (cid, p) in enumerate(items, 1):
+        medal = {1: "🥇", 2: "🥈", 3: "🥉"}.get(i, f"{i}.")
+        lines.append(f"{medal} {p['names']} — **{p['score']}**")
+    total_rub = sum(p["penalty_rub"] for p in participants.values())
+    if total_rub > 0:
+        lines.append(f"\n💰 Общак: **{total_rub} ₽**")
+    return "\n".join(lines)
+
+
+async def broadcast_live_table(bot):
+    """Отправить лайв-таблицу в групповой чат."""
+    text = _format_live_table()
+    if text:
+        await announce(bot, text)
 
 
 async def _finish_party(bot):

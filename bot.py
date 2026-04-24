@@ -472,6 +472,19 @@ async def cmd_setgroup(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def cmd_admin(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if is_admin(update.effective_user.id):
         await update.message.reply_text("👑 Админ-панель:", reply_markup=admin_kb())
+    else:
+        await update.message.reply_text(
+            f"Ты не админ.\nТвой ID: `{update.effective_user.id}`\nТекущий админ: `{ADMIN_ID}`",
+            parse_mode="Markdown",
+        )
+
+
+async def cmd_myid(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    uid = update.effective_user.id
+    await update.message.reply_text(
+        f"🆔 Твой ID: `{uid}`",
+        parse_mode="Markdown",
+    )
 
 
 # --- Приём сообщений (текст/фото) ---
@@ -1705,6 +1718,7 @@ def main():
     app.add_handler(CommandHandler("start", cmd_start))
     app.add_handler(CommandHandler("admin", cmd_admin))
     app.add_handler(CommandHandler("setgroup", cmd_setgroup))
+    app.add_handler(CommandHandler("myid", cmd_myid))
     app.add_handler(CallbackQueryHandler(on_callback))
     app.add_handler(MessageHandler(
         (filters.TEXT | filters.PHOTO) & ~filters.COMMAND, on_message
